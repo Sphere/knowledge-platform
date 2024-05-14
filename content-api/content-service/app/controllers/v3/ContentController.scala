@@ -12,6 +12,8 @@ import utils.{ActorNames, ApiId, JavaJsonUtils}
 import scala.collection.JavaConverters._
 
 import scala.concurrent.{ExecutionContext, Future}
+import org.sunbird.kafka.client.KafkaClient
+import org.sunbird.telemetry.logger.TelemetryManager
 
 @Singleton
 class ContentController @Inject()(@Named(ActorNames.CONTENT_ACTOR) contentActor: ActorRef, @Named(ActorNames.COLLECTION_ACTOR) collectionActor: ActorRef, cc: ControllerComponents, actorSystem: ActorSystem)(implicit exec: ExecutionContext) extends BaseController(cc) {
@@ -19,6 +21,7 @@ class ContentController @Inject()(@Named(ActorNames.CONTENT_ACTOR) contentActor:
     val objectType = "Content"
     val schemaName: String = "content"
     val version = "1.0"
+    private val kafka_producer= new KafkaClient()
 
     def create() = Action.async { implicit request =>
         val headers = commonHeaders()
@@ -28,6 +31,10 @@ class ContentController @Inject()(@Named(ActorNames.CONTENT_ACTOR) contentActor:
         val contentRequest = getRequest(content, headers, "createContent", true)
         setRequestContext(contentRequest, version, objectType, schemaName)
         getResult(ApiId.CREATE_CONTENT, contentActor, contentRequest)
+        val result=getResult(ApiId.CREATE_CONTENT, contentActor, contentRequest)
+        TelemetryManager.info("CBP Create API Success: " + result)
+        kafka_producer.send("CBPActivity_topic",result.toString)
+        result
 
     }
 
