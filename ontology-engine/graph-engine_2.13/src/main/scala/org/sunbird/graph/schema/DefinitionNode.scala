@@ -221,24 +221,24 @@ object DefinitionNode {
   def resetJsonProperties(node: Node, graphId: String, version: String, schemaName: String, ocd: ObjectCategoryDefinition = ObjectCategoryDefinition())(implicit ec: ExecutionContext, oec: OntologyEngineContext): Node = {
     val definition = DefinitionFactory.getDefinition(graphId, schemaName, version, ocd)
     val jsonPropList = definition.fetchJsonProps()
-    if (!jsonPropList.isEmpty) {
-      lazy val arrayPropList = definition.fetchArrayProps()
-      node.getMetadata.entrySet().asScala.map(entry => {
-        if (jsonPropList.contains(entry.getKey)) {
-          entry.getValue match {
-            // Data migrated from Neo4j can hold array properties as plain comma-joined strings
-            // (e.g. ownershipType=createdFor, keywords=a,b) which are not valid JSON.
-            case value: String =>
-              try entry.setValue(JsonUtils.deserialize(value, classOf[Object]))
-              catch {
-                case _: Exception if !StringUtils.startsWithAny(value.trim, "[", "{") && arrayPropList.contains(entry.getKey) =>
-                  entry.setValue(new util.ArrayList[String](value.split(",").map(_.trim).filter(StringUtils.isNotEmpty).toList.asJava))
-              }
-            case _ => entry
+    val arrayPropList = definition.fetchArrayProps()
+    // Data migrated from Neo4j can hold array properties as plain comma-joined strings
+    // (e.g. ownershipType=createdFor, keywords=a,b) which are neither valid JSON nor arrays.
+    def isLegacyArrayValue(key: String, value: String): Boolean =
+      arrayPropList.contains(key) && !StringUtils.startsWithAny(value.trim, "[", "{")
+    def toList(value: String): util.List[String] =
+      new util.ArrayList[String](value.split(",").map(_.trim).filter(StringUtils.isNotEmpty).toList.asJava)
+    node.getMetadata.entrySet().asScala.foreach(entry => {
+      entry.getValue match {
+        case value: String if jsonPropList.contains(entry.getKey) =>
+          try entry.setValue(JsonUtils.deserialize(value, classOf[Object]))
+          catch {
+            case _: Exception if isLegacyArrayValue(entry.getKey, value) => entry.setValue(toList(value))
           }
-        }
-      })
-    }
+        case value: String if isLegacyArrayValue(entry.getKey, value) => entry.setValue(toList(value))
+        case _ =>
+      }
+    })
     node
   }
 
