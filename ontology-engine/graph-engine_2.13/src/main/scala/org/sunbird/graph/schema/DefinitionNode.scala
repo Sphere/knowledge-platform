@@ -219,12 +219,18 @@ object DefinitionNode {
   }
 
   def resetJsonProperties(node: Node, graphId: String, version: String, schemaName: String, ocd: ObjectCategoryDefinition = ObjectCategoryDefinition())(implicit ec: ExecutionContext, oec: OntologyEngineContext): Node = {
-    val jsonPropList = fetchJsonProps(graphId, version, schemaName, ocd)
+    val definition = DefinitionFactory.getDefinition(graphId, schemaName, version, ocd)
+    val jsonPropList = definition.fetchJsonProps()
     if (!jsonPropList.isEmpty) {
+      lazy val arrayPropList = definition.fetchArrayProps()
       node.getMetadata.entrySet().asScala.map(entry => {
         if (jsonPropList.contains(entry.getKey)) {
           entry.getValue match {
-            case value: String => entry.setValue(JsonUtils.deserialize(value.asInstanceOf[String], classOf[Object]))
+            // Data migrated from Neo4j can hold array properties as plain comma-joined strings
+            // (e.g. ownershipType=createdFor, keywords=a,b) which are not valid JSON.
+            case value: String if !StringUtils.startsWithAny(value.trim, "[", "{", "\"") && arrayPropList.contains(entry.getKey) =>
+              entry.setValue(new util.ArrayList[String](value.split(",").map(_.trim).filter(StringUtils.isNotEmpty).toList.asJava))
+            case value: String => entry.setValue(JsonUtils.deserialize(value, classOf[Object]))
             case _ => entry
           }
         }
