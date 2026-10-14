@@ -228,9 +228,12 @@ object DefinitionNode {
           entry.getValue match {
             // Data migrated from Neo4j can hold array properties as plain comma-joined strings
             // (e.g. ownershipType=createdFor, keywords=a,b) which are not valid JSON.
-            case value: String if !StringUtils.startsWithAny(value.trim, "[", "{", "\"") && arrayPropList.contains(entry.getKey) =>
-              entry.setValue(new util.ArrayList[String](value.split(",").map(_.trim).filter(StringUtils.isNotEmpty).toList.asJava))
-            case value: String => entry.setValue(JsonUtils.deserialize(value, classOf[Object]))
+            case value: String =>
+              try entry.setValue(JsonUtils.deserialize(value, classOf[Object]))
+              catch {
+                case _: Exception if !StringUtils.startsWithAny(value.trim, "[", "{") && arrayPropList.contains(entry.getKey) =>
+                  entry.setValue(new util.ArrayList[String](value.split(",").map(_.trim).filter(StringUtils.isNotEmpty).toList.asJava))
+              }
             case _ => entry
           }
         }
