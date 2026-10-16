@@ -47,6 +47,8 @@ class DefinitionDTO(graphId: String, schemaName: String, version: String = "1.0"
         jsonProps.toList
     }
 
+    def fetchArrayProps(): List[String] = schemaValidator.getArrayProps.asScala.toList
+
     def getInRelations(): List[Map[String, AnyRef]] = {
         if (schemaValidator.getConfig.hasPath("relations"))
             schemaValidator.getConfig
